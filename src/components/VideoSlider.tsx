@@ -1,0 +1,108 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import VideoPlayer from './VideoPlayer';
+
+interface Video {
+    _id: string;
+    title: string;
+    description: string;
+    videoUrl: string;
+    duration: number;
+}
+
+const VideoSlider: React.FC = () => {
+    const [videos, setVideos] = useState<Video[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchVideos();
+    }, []);
+
+    const fetchVideos = async () => {
+        try {
+            const response = await axios.get('/videos/active');
+            setVideos(response.data.videos);
+        } catch (error) {
+            console.error('Error fetching videos:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const nextVideo = () => {
+        setCurrentIndex((prev) => (prev + 1) % videos.length);
+    };
+
+    const prevVideo = () => {
+        setCurrentIndex((prev) => (prev - 1 + videos.length) % videos.length);
+    };
+
+    const handleWatchComplete = () => {
+        // Auto advance to next video after completion
+        setTimeout(() => {
+            nextVideo();
+        }, 2000);
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center w-full bg-gray-200 rounded-lg h-96 animate-pulse">
+                <div className="text-gray-500">Loading videos...</div>
+            </div>
+        );
+    }
+
+    if (videos.length === 0) {
+        return (
+            <div className="flex items-center justify-center w-full bg-gray-100 rounded-lg h-96">
+                <div className="text-gray-500">No videos available</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="relative w-full max-w-4xl mx-auto">
+            <div className="relative overflow-hidden rounded-lg">
+                <VideoPlayer
+                    video={videos[currentIndex]}
+                    onWatchComplete={handleWatchComplete}
+                />
+
+                {/* Navigation buttons */}
+                {videos.length > 1 && (
+                    <>
+                        <button
+                            onClick={prevVideo}
+                            className="absolute p-2 text-white transition-all transform -translate-y-1/2 bg-black bg-opacity-50 rounded-full left-4 top-1/2 hover:bg-opacity-75"
+                        >
+                            ‹
+                        </button>
+                        <button
+                            onClick={nextVideo}
+                            className="absolute p-2 text-white transition-all transform -translate-y-1/2 bg-black bg-opacity-50 rounded-full right-4 top-1/2 hover:bg-opacity-75"
+                        >
+                            ›
+                        </button>
+                    </>
+                )}
+            </div>
+
+            {/* Video indicators */}
+            {videos.length > 1 && (
+                <div className="flex justify-center mt-4 space-x-2">
+                    {videos.map((_, index) => (
+                        <button
+                            key={index}
+                            onClick={() => setCurrentIndex(index)}
+                            className={`w-3 h-3 rounded-full transition-all ${index === currentIndex ? 'bg-primary-600' : 'bg-gray-300'
+                                }`}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default VideoSlider;

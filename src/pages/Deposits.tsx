@@ -1,0 +1,1245 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useSearchParams } from 'react-router-dom';
+import FilePreviewModal from '../components/ImagePreviewModal';
+import { env } from '../config/env';
+import {
+  Plus,
+  CreditCard,
+  Smartphone,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Camera,
+  DollarSign,
+  Copy,
+  CheckCircle2,
+  Eye,
+  TrendingUp
+} from 'lucide-react';
+import axios from 'axios';
+
+// ========== Interfaces ==========
+interface Deposit {
+  _id: string;
+  amount: number;
+  totalAmount: number;
+  package: string;
+  paymentMethod: 'bank_transfer' | 'mobile_money';
+  merchantAccount: {
+    id: string;
+    name: string;
+    type: string;
+    accountNumber: string;
+    accountName: string;
+    bankName?: string;
+    phoneNumber?: string;
+    instructions: string;
+  };
+  status: 'pending' | 'completed' | 'rejected';
+  receiptUrl?: string;
+  transactionReference?: string;
+  isUpgraded?: boolean;
+  upgradedTo?: string;
+  upgradedFrom?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+interface MerchantAccount {
+  _id: string;
+  name: string;
+  type: 'bank' | 'mobile_money';
+  accountNumber: string;
+  accountName: string;
+  bankName?: string;
+  phoneNumber?: string;
+  instructions: string;
+  isActive: boolean;
+}
+
+// const PACKAGES = [
+//     { name: "7th Stock Package", price: 192000, dailyReturn: 3200 },
+//     { name: "6th Stock Package", price: 96000, dailyReturn: 1600 },
+//     { name: "5th Stock Package", price: 48000, dailyReturn: 800 },
+//     { name: "4th Stock Package", price: 24000, dailyReturn: 400 },
+//     { name: "3rd Stock Package", price: 12000, dailyReturn: 200 },
+//     { name: "2nd Stock Package", price: 6000, dailyReturn: 100 },
+//     { name: "1st Stock Package", price: 3000, dailyReturn: 50 },
+// ];
+const PACKAGES = [
+  { name: "8th Stock Package", price: 320000, dailyReturn: 11040 },
+  { name: "7th Stock Package", price: 160000, dailyReturn: 5520 },
+  { name: "6th Stock Package", price: 80000, dailyReturn: 2750 },
+  { name: "5th Stock Package", price: 40000, dailyReturn: 1350 },
+  { name: "4th Stock Package", price: 20000, dailyReturn: 670 },
+  { name: "3rd Stock Package", price: 10000, dailyReturn: 330 },
+  { name: "2nd Stock Package", price: 5000, dailyReturn: 162 },
+  { name: "1st Stock Package", price: 2500, dailyReturn: 80 },
+];
+
+// ========== Component ==========
+export default function Deposits() {
+  const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+
+  // State
+  const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [merchantAccounts, setMerchantAccounts] = useState<MerchantAccount[]>([]);
+  const [upgradeMerchantAccounts, setUpgradeMerchantAccounts] = useState<MerchantAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDepositForm, setShowDepositForm] = useState(false);
+  const [showUpgradeForm, setShowUpgradeForm] = useState(false);
+
+  const payCreditMode = searchParams.get('payCredit') === 'true' && (user?.pendingUplineCredit || 0) > 0;
+
+  // For upgrade logic:
+  const [upgradeableDeposit, setUpgradeableDeposit] = useState<Deposit | null>(null);
+  const [validUpgradePackages, setValidUpgradePackages] = useState<{ name: string, price: number }[]>([]);
+  const [selectedTargetPackage, setSelectedTargetPackage] = useState<{ name: string, price: number } | null>(null);
+  const [hasPendingUpgrade, setHasPendingUpgrade] = useState(false);
+  const [pendingUpgradePackage, setPendingUpgradePackage] = useState<string>('');
+
+  // Form data
+  const [formData, setFormData] = useState({
+    amount: '',
+    package: '',
+    paymentMethod: 'bank_transfer' as 'bank_transfer' | 'mobile_money',
+    merchantAccountId: '',
+    transactionReference: ''
+  });
+  const [upgradeFormData, setUpgradeFormData] = useState({
+    paymentMethod: 'bank_transfer' as 'bank_transfer' | 'mobile_money',
+    merchantAccountId: '',
+    transactionReference: ''
+
+
+  });
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string>('');
+  const [upgradeReceipt, setUpgradeReceipt] = useState<File | null>(null);
+  const [upgradeReceiptPreview, setUpgradeReceiptPreview] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [copiedText, setCopiedText] = useState('');
+  const [imagePreview, setImagePreview] = useState({
+    isOpen: false,
+    imageUrl: '',
+    title: 'Receipt Preview'
+  });
+
+  // ========== Data fetch ==========
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line
+  }, []);
+
+  // Check for payCredit parameter to auto-show deposit form
+  useEffect(() => {
+    if (payCreditMode) {
+      setShowDepositForm(true);
+      setFormData((prev) => ({
+        ...prev,
+        amount: (user?.pendingUplineCredit || 0).toString(),
+        package: 'Credit Payment',
+      }));
+    }
+  }, [payCreditMode, user?.pendingUplineCredit]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [depositsResponse, merchantAccountsResponse, upgradeableResponse] = await Promise.all([
+        axios.get('/deposits'),
+        axios.get('/deposits/merchant-accounts'),
+        axios.get('/deposits/upgradeable')
+      ]);
+      setDeposits(Array.isArray(depositsResponse.data.deposits) ? depositsResponse.data.deposits : []);
+      setMerchantAccounts(Array.isArray(merchantAccountsResponse.data.merchantAccounts) ? merchantAccountsResponse.data.merchantAccounts : []);
+      setUpgradeableDeposit(upgradeableResponse.data.upgradeableDeposit || null);
+      setValidUpgradePackages(upgradeableResponse.data.validUpgradePackages || []);
+      setHasPendingUpgrade(upgradeableResponse.data.hasPendingUpgrade || false);
+      setPendingUpgradePackage(upgradeableResponse.data.pendingUpgradePackage || '');
+    } catch (error) {
+      setError('Failed to fetch data.');
+      setDeposits([]);
+      setMerchantAccounts([]);
+      setUpgradeableDeposit(null);
+      setValidUpgradePackages([]);
+      setHasPendingUpgrade(false);
+      setPendingUpgradePackage('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchUpgradeMerchantAccounts = async () => {
+    try {
+      const response = await axios.get('/deposits/merchant-accounts?forUpgrade=true');
+      setUpgradeMerchantAccounts(Array.isArray(response.data.merchantAccounts) ? response.data.merchantAccounts : []);
+    } catch (error) {
+      console.error('Failed to fetch upgrade merchant accounts:', error);
+      setUpgradeMerchantAccounts([]);
+    }
+  };
+
+  // ========== Form/File handlers ==========
+  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setReceipt(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setReceiptPreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+  const handleUpgradeReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUpgradeReceipt(file);
+      const reader = new FileReader();
+      reader.onload = (e) => setUpgradeReceiptPreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // ========== New Deposit ==========
+  const handlePackageSelect = (pkg: typeof PACKAGES[number]) => {
+    setFormData(prev => ({
+      ...prev,
+      amount: pkg.price.toString(),
+      package: pkg.name
+    }));
+  };
+
+  const validateDepositForm = () => {
+    if (!formData.package) {
+      setError('Please select a package.');
+      return false;
+    }
+    if (!formData.amount || Number(formData.amount) <= 0) {
+      setError('Please enter a valid deposit amount.');
+      return false;
+    }
+    if (!formData.paymentMethod) {
+      setError('Please select a payment method.');
+      return false;
+    }
+    if (!formData.merchantAccountId) {
+      setError('Please select a payment account.');
+      return false;
+    }
+    if (!formData.transactionReference?.trim()) {
+      setError('Transaction reference is required.');
+      return false;
+    }
+    if (!receipt) {
+      setError('Payment receipt is required.');
+      return false;
+    }
+    return true;
+  };
+
+  const validateUpgradeForm = () => {
+    if (!selectedTargetPackage) {
+      setError('Please choose a package to upgrade.');
+      return false;
+    }
+    if (!upgradeFormData.paymentMethod) {
+      setError('Please select a payment method.');
+      return false;
+    }
+    if (!upgradeFormData.merchantAccountId) {
+      setError('Please select a payment account.');
+      return false;
+    }
+    if (!upgradeFormData.transactionReference?.trim()) {
+      setError('Transaction reference is required for upgrades.');
+      return false;
+    }
+    if (!upgradeReceipt) {
+      setError('Payment receipt is required for upgrades.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!validateDepositForm()) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const formDataToSend = new FormData();
+      formDataToSend.append('amount', formData.amount);
+      formDataToSend.append('package', formData.package);
+      formDataToSend.append('paymentMethod', formData.paymentMethod);
+      formDataToSend.append('merchantAccountId', formData.merchantAccountId);
+      formDataToSend.append('transactionReference', formData.transactionReference);
+      if (receipt) formDataToSend.append('receipt', receipt);
+      await axios.post('/deposits', formDataToSend, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setShowDepositForm(false);
+      setFormData({
+        amount: '',
+        package: '',
+        paymentMethod: 'bank_transfer',
+        merchantAccountId: '',
+        transactionReference: ''
+      });
+      setReceipt(null);
+      setReceiptPreview('');
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to create deposit');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ========== UPGRADE ==============
+  const handleUpgradePackageSelect = (pkg: { name: string; price: number }) => {
+    setSelectedTargetPackage(pkg);
+  };
+
+  const handleUpgradeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!upgradeableDeposit || !selectedTargetPackage) {
+      setError("Select a package to upgrade.");
+      return;
+    }
+    if (!validateUpgradeForm()) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const currentTotal = Number((upgradeableDeposit?.totalAmount ?? upgradeableDeposit?.amount) || 0);
+      const upgradeAmount = selectedTargetPackage.price - currentTotal;
+      const formDataToSend = new FormData();
+      formDataToSend.append('newPackage', selectedTargetPackage.name);
+      formDataToSend.append('newAmount', upgradeAmount.toString());
+      formDataToSend.append('paymentMethod', upgradeFormData.paymentMethod);
+      formDataToSend.append('merchantAccountId', upgradeFormData.merchantAccountId);
+      formDataToSend.append('transactionReference', upgradeFormData.transactionReference);
+      if (upgradeReceipt) formDataToSend.append('receipt', upgradeReceipt);
+
+      await axios.post(`/deposits/upgrade/${upgradeableDeposit._id}`, formDataToSend, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setShowUpgradeForm(false);
+      setSelectedTargetPackage(null);
+      setUpgradeFormData({
+        paymentMethod: 'bank_transfer',
+        merchantAccountId: '',
+        transactionReference: ''
+      });
+      setUpgradeReceipt(null);
+      setUpgradeReceiptPreview('');
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to submit upgrade request');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ========== Utilities ==========
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedText(text);
+      setTimeout(() => setCopiedText(''), 2000);
+    } catch (err) { }
+  };
+  const viewReceipt = (receiptUrl: string) => {
+    setImagePreview({
+      isOpen: true,
+      imageUrl: receiptUrl.startsWith('http') ? receiptUrl : `${window.location.origin}${receiptUrl}`,
+      // imageUrl: receiptUrl.startsWith('http') ? receiptUrl : `${env.API_BASE_URL} ${receiptUrl}`,
+      title: 'Payment Receipt'
+    });
+  };
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="w-5 h-5 text-green-500" />;
+      case 'rejected': return <XCircle className="w-5 h-5 text-red-500" />;
+      default: return <Clock className="w-5 h-5 text-yellow-500" />;
+    }
+  };
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'text-green-600 bg-green-50 border-green-200';
+      case 'rejected': return 'text-red-600 bg-red-50 border-red-200';
+      default: return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+    }
+  };
+  const selectedMerchantAccount = merchantAccounts.find(acc => acc._id === formData.merchantAccountId);
+  const selectedUpgradeMerchantAccount = upgradeMerchantAccounts.find(acc => acc._id === upgradeFormData.merchantAccountId);
+  const hasPendingInitialDeposit = deposits.some((deposit) => {
+    return deposit.package !== 'Credit Payment' && !deposit.upgradedFrom && deposit.status === 'pending';
+  });
+  // Disable new deposit button if user already has a completed initial deposit
+  const hasCompletedInitialDeposit = deposits.some((deposit) => {
+    return deposit.package !== 'Credit Payment' && !deposit.upgradedFrom && deposit.status === 'completed';
+  });
+
+  // Numeric safety checks for upgrade validation
+  const selectedPrice = Number(selectedTargetPackage?.price || 0);
+  const currentDepositTotal = Number((upgradeableDeposit?.totalAmount ?? upgradeableDeposit?.amount) || 0);
+  const isSelectedPriceTooLow = selectedTargetPackage ? selectedPrice <= currentDepositTotal : false;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="w-12 h-12 border-b-2 rounded-full animate-spin border-primary-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen py-8 bg-gray-50">
+      <div className="px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
+        {/* ---------- Header ------------- */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Deposits</h1>
+            <p className="mt-1 text-gray-600">
+              Manage your investment deposits
+            </p>
+          </div>
+          <div className="flex space-x-4">
+            <button
+              onClick={() => setShowDepositForm(true)}
+              className="flex items-center px-6 py-3 space-x-2 font-medium text-white rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+              disabled={hasPendingInitialDeposit || hasCompletedInitialDeposit}
+              title={
+                hasPendingInitialDeposit
+                  ? "You already have a pending initial deposit request. Please wait for it to be reviewed before submitting another."
+                  : hasCompletedInitialDeposit
+                    ? "You already have a completed deposit. Use Upgrade Package to increase your investment."
+                    : ""
+              }
+            >
+              <Plus className="w-5 h-5" />
+              <span>New Deposit</span>
+            </button>
+            {upgradeableDeposit && !hasPendingUpgrade && (
+              <button
+                onClick={() => {
+                  setShowUpgradeForm(true);
+                  fetchUpgradeMerchantAccounts();
+                }}
+                className="flex items-center px-6 py-3 space-x-2 font-medium text-white rounded-lg bg-gold-600 hover:bg-gold-700"
+              >
+                <TrendingUp className="w-5 h-5" />
+                <span>Upgrade Package</span>
+              </button>
+            )}
+            {hasPendingUpgrade && (
+              <button
+                disabled
+                className="flex items-center px-6 py-3 space-x-2 font-medium text-white bg-gray-400 rounded-lg cursor-not-allowed"
+                title={`You have a pending upgrade request for ${pendingUpgradePackage}. Wait for approval before requesting another upgrade.`}
+              >
+                <Clock className="w-5 h-5" />
+                <span>Upgrade Pending</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {(user?.pendingUplineCredit || 0) > 0 ? (
+          <div className="p-4 mb-6 text-sm text-orange-800 border border-orange-200 bg-orange-50 rounded-xl">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-orange-900">Upline credit pending</p>
+                  <p>
+                    You owe {(user?.pendingUplineCredit || 0).toLocaleString()} ETB in upline credit. If your available balance is enough, it will be deducted automatically to clear this amount.
+                  </p>
+                </div>
+                <span className="px-3 py-1 text-xs font-semibold tracking-wide text-white uppercase bg-orange-600 rounded-full">
+                  Manual payment required
+                </span>
+              </div>
+              <p>
+                This credit requires a manual payment request and approval by your upline referrer.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {hasPendingUpgrade ? (
+          <div className="p-4 mb-6 text-sm text-emerald-800 border border-emerald-200 bg-emerald-50 rounded-xl">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-emerald-900">Upgrade request pending</p>
+                  <p>
+                    Your upgrade request to {pendingUpgradePackage} is pending approval.
+                  </p>
+                </div>
+                <span className="px-3 py-1 text-xs font-semibold tracking-wide text-white uppercase bg-emerald-600 rounded-full">
+                  Awaiting approval
+                </span>
+              </div>
+              <p>
+                You cannot request another upgrade until this request is approved or completed by the admin.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ---------- Image Preview Modal ---------- */}
+        <FilePreviewModal
+          isOpen={imagePreview.isOpen}
+          onClose={() => setImagePreview({ ...imagePreview, isOpen: false })}
+          fileUrl={imagePreview.imageUrl}
+          title={imagePreview.title}
+          allowDownload
+        />
+
+        {/* ---------- Deposit Modal ---------- */}
+        {
+          showDepositForm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+              <div className="w-full max-w-4xl max-h-screen overflow-y-auto bg-white rounded-xl">
+                <div className="p-6">
+                  <h2 className="mb-6 text-2xl font-bold text-gray-900">
+                    Make a Deposit
+                  </h2>
+                  {payCreditMode && (
+                    <div className="p-4 mb-6 text-sm text-orange-800 border border-orange-200 bg-orange-50 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-5 h-5 text-orange-600" />
+                        <div>
+                          <p className="font-semibold">Pay Pending Credit</p>
+                          <p>You have {(user?.pendingUplineCredit || 0).toLocaleString()} ETB in pending upline credit. Your available balance will be used to settle it when enough funds are present, and you can also submit a manual payment request.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {error && (
+                    <div className="p-3 mb-4 text-sm text-red-700 border border-red-200 rounded-lg bg-red-50">
+                      {error}
+                    </div>
+                  )}
+                  {!payCreditMode && (
+                    <div className="mb-6">
+                      <h3 className="mb-4 text-lg font-semibold text-gray-900">
+                        Choose Package
+                      </h3>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {PACKAGES.map((pkg, index) => (
+                          <div
+                            key={index}
+                            onClick={() => handlePackageSelect(pkg)}
+                            className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.package === pkg.name
+                              ? "border-primary-500 bg-primary-50"
+                              : "border-gray-200 hover:border-gray-300"
+                              }`}
+                          >
+                            <h4 className="font-semibold text-gray-900">
+                              {pkg.name}
+                            </h4>
+                            <p className="mt-1 text-2xl font-bold text-primary-600">
+                              {pkg.price.toLocaleString()} ETB
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Daily Return: {pkg.dailyReturn.toLocaleString()} ETB
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
+                          Amount (ETB)
+                        </label>
+                        <div className="relative">
+                          <DollarSign className="absolute w-5 h-5 text-gray-400 transform -translate-y-1/2 left-3 top-1/2" />
+                          <input
+                            type="number"
+                            value={formData.amount}
+                            onChange={(e) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                amount: e.target.value,
+                              }))
+                            }
+                            className="w-full py-3 pl-10 pr-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            placeholder="Enter amount"
+                            required
+                            min="2500"
+                            disabled={payCreditMode}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
+                          Payment Method
+                        </label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div
+                            onClick={() =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                paymentMethod: "bank_transfer",
+                              }))
+                            }
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${formData.paymentMethod === "bank_transfer"
+                              ? "border-primary-500 bg-primary-50"
+                              : "border-gray-200 hover:border-gray-300"
+                              }`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <CreditCard className="w-5 h-5 text-primary-600" />
+                              <span className="font-medium">Bank Transfer</span>
+                            </div>
+                          </div>
+                          <div
+                            onClick={() =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                paymentMethod: "mobile_money",
+                              }))
+                            }
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${formData.paymentMethod === "mobile_money"
+                              ? "border-primary-500 bg-primary-50"
+                              : "border-gray-200 hover:border-gray-300"
+                              }`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Smartphone className="w-5 h-5 text-primary-600" />
+                              <span className="font-medium">Mobile Money</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Merchant Account Selection */}
+                    <div>
+                      <label className="block mb-2 text-sm font-medium text-gray-700">
+                        Select Payment Account
+                      </label>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {merchantAccounts
+                          .filter(
+                            (acc) =>
+                              (formData.paymentMethod === "bank_transfer" &&
+                                acc.type === "bank") ||
+                              (formData.paymentMethod === "mobile_money" &&
+                                acc.type === "mobile_money")
+                          )
+                          .map((account) => (
+                            <div
+                              key={account._id}
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  merchantAccountId: account._id,
+                                }))
+                              }
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${formData.merchantAccountId === account._id
+                                ? "border-primary-500 bg-primary-50"
+                                : "border-gray-200 hover:border-gray-300"
+                                }`}
+                            >
+                              <h4 className="font-semibold text-gray-900">
+                                {account.name}
+                              </h4>
+                              <div className="mt-2 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">
+                                    Account:
+                                  </span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono text-sm">
+                                      {account.type === 'bank' ? account.accountNumber : account.phoneNumber}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyToClipboard(account.type === 'bank' ? account.accountNumber : account.phoneNumber);
+                                      }}
+                                      className="text-primary-600 hover:text-primary-700"
+                                    >
+                                      {copiedText === (account.type === 'bank' ? account.accountNumber : account.phoneNumber) ? (
+                                        <CheckCircle2 className="w-4 h-4" />
+                                      ) : (
+                                        <Copy className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">
+                                    Name:
+                                  </span>
+                                  <span className="text-sm">
+                                    {account.accountName}
+                                  </span>
+                                </div>
+                                {account.bankName && (
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-600">
+                                      Bank:
+                                    </span>
+                                    <span className="text-sm">
+                                      {account.bankName}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {merchantAccounts.filter(
+                          (acc) =>
+                            (formData.paymentMethod === "bank_transfer" &&
+                              acc.type === "bank") ||
+                            (formData.paymentMethod === "mobile_money" &&
+                              acc.type === "mobile_money")
+                        ).length === 0 && (
+                            <div className="p-4 text-sm text-gray-600 border border-gray-200 border-dashed rounded-lg col-span-full bg-gray-50">
+                              No payment accounts found for this method. Ask your referrer to add a merchant account or use admin accounts instead.
+                            </div>
+                          )}
+                      </div>
+                    </div>
+                    {/* Payment Instructions */}
+                    {selectedMerchantAccount && (
+                      <div className="p-4 border border-emerald-200 rounded-lg bg-emerald-50">
+                        <h4 className="mb-2 font-semibold text-emerald-900">
+                          Payment Instructions
+                        </h4>
+                        <p className="text-sm text-emerald-800">
+                          {selectedMerchantAccount.instructions}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block mb-2 text-sm font-medium text-gray-700">
+                        Transaction Reference *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.transactionReference}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            transactionReference: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="Enter transaction reference or ID"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-2 text-sm font-medium text-gray-700">
+                        Payment Receipt *
+                      </label>
+                      <div className="p-6 text-center border-2 border-gray-300 border-dashed rounded-lg">
+                        <input
+                          type="file"
+                          accept="image/png, image/jpeg, image/jpg, image/gif, application/pdf"
+                          onChange={handleReceiptChange}
+                          className="hidden"
+                          id="receipt-upload"
+                        />
+                        <label
+                          htmlFor="receipt-upload"
+                          className="cursor-pointer"
+                        >
+                          {receiptPreview ? (
+                            <div className="space-y-4">
+                              <img
+                                src={receiptPreview}
+                                alt="Receipt preview"
+                                className="object-contain h-32 max-w-full mx-auto rounded"
+                              />
+                              <p className="font-medium text-green-600">
+                                {receipt?.name}
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <Camera className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                              <p className="text-gray-600">
+                                Click to upload payment receipt
+                              </p>
+                              <p className="mt-1 text-sm text-gray-500">
+                                PNG, JPG up to 10MB
+                              </p>
+                            </>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex space-x-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowDepositForm(false)}
+                        className="flex-1 px-4 py-3 font-medium text-gray-800 bg-gray-200 rounded-lg hover:bg-gray-300"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={
+                          submitting ||
+                          !formData.package ||
+                          !formData.amount ||
+                          !formData.merchantAccountId ||
+                          !formData.transactionReference ||
+                          !receipt
+                        }
+                        className="flex items-center justify-center flex-1 px-4 py-3 font-medium text-white rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submitting ? (
+                          <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
+                        ) : (
+                          "Submit Deposit"
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )
+        }
+
+        {/* ========== Deposits List ========== */}
+        <div className="bg-white border border-gray-200 shadow-sm rounded-xl">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Deposit History
+            </h2>
+          </div>
+          {deposits.length > 0 ? (
+            <div className="divide-y divide-gray-200">
+              {deposits.map((deposit) => (
+                <div key={deposit._id} className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      {getStatusIcon(deposit.status)}
+                      <div>
+                        <h3 className="font-semibold text-gray-900">
+                          {deposit.package}
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          {new Date(deposit.createdAt).toLocaleDateString()} •{" "}
+                          {deposit.merchantAccount?.name}
+                        </p>
+                        {deposit.transactionReference && (
+                          <p className="text-xs text-gray-500">
+                            Ref: {deposit.transactionReference}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-gray-900">
+                        {deposit.amount.toLocaleString()} ETB
+                      </p>
+                      {deposit.isUpgraded && (
+                        <p className="text-xs font-medium text-emerald-600">
+                          ✓ Upgraded
+                        </p>
+                      )}
+                      {deposit.upgradedFrom && (
+                        <p className="text-xs font-medium text-green-600">
+                          ↗ Package upgrade
+                        </p>
+                      )}
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(
+                          deposit.status
+                        )}`}
+                      >
+                        {deposit.status.charAt(0).toUpperCase() +
+                          deposit.status.slice(1)}
+                      </span>
+                    </div>
+                  </div>
+                  {deposit.receiptUrl && (
+                    <div className="mt-4">
+                      <button
+                        onClick={() => viewReceipt(deposit.receiptUrl!)}
+                        className="flex items-center space-x-1 text-sm text-primary-600 hover:text-primary-700"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>View Receipt</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-12 text-center">
+              <DollarSign className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="mb-2 text-lg font-semibold text-gray-900">
+                No deposits yet
+              </h3>
+              <p className="mb-6 text-gray-600">
+                Start your investment journey by making your first deposit
+              </p>
+
+              <button
+                onClick={() => setShowDepositForm(true)}
+
+                className="px-6 py-3 font-medium text-white rounded-lg bg-primary-600 hover:bg-primary-700"
+              >
+                Make First Deposit
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ========== Upgrade Modal ========== */}
+        {
+          showUpgradeForm && upgradeableDeposit && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+              <div className="w-full max-w-4xl max-h-screen overflow-y-auto bg-white rounded-xl">
+                <div className="p-6">
+                  <h2 className="mb-6 text-2xl font-bold text-gray-900">
+                    Upgrade Your Package
+                  </h2>
+                  {error && (
+                    <div className="p-3 mb-4 text-sm text-red-700 border border-red-200 rounded-lg bg-red-50">
+                      {error}
+                    </div>
+                  )}
+                  <div className="p-4 mb-6 border border-emerald-200 rounded-lg bg-emerald-50">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-emerald-900">
+                          Current Package:
+                        </h4>
+                        <p className="text-emerald-800">
+                          {upgradeableDeposit.package}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-emerald-900">
+                          {upgradeableDeposit.amount.toLocaleString()} ETB
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mb-6">
+                    <h3 className="mb-4 text-lg font-semibold text-gray-900">
+                      Choose Upgrade Package
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      {validUpgradePackages.map((pkg, index) => {
+                        return (
+                          <div
+                            key={index}
+                            onClick={() => handleUpgradePackageSelect(pkg)}
+                            className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${selectedTargetPackage &&
+                              selectedTargetPackage.name === pkg.name
+                              ? "border-primary-500 bg-primary-50"
+                              : "border-gray-200 hover:border-gray-300"
+                              }`}
+                          >
+                            <h4 className="font-semibold text-gray-900">
+                              {pkg.name}
+                            </h4>
+                            <p className="mt-1 text-2xl font-bold text-primary-600">
+                              {pkg.price.toLocaleString()} ETB
+                            </p>
+                            <div className="mt-2 space-y-1 text-sm">
+                              <p className="text-gray-600">
+                                Package Price:{" "}
+                                <span className="font-semibold text-orange-600">
+                                  {pkg.price.toLocaleString()} ETB
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <form onSubmit={handleUpgradeSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
+                          Upgrade Amount (ETB)
+                        </label>
+                        <input
+                          type="number"
+                          value={
+                            selectedTargetPackage
+                              ? selectedTargetPackage.price - currentDepositTotal
+                              : ""
+                          }
+                          readOnly
+                          className="w-full py-3 pl-10 pr-3 bg-gray-100 border border-gray-300 rounded-lg"
+                          placeholder="Select package to see upgrade amount"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
+                          Payment Method
+                        </label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div
+                            onClick={() =>
+                              setUpgradeFormData((prev) => ({
+                                ...prev,
+                                paymentMethod: "bank_transfer",
+                              }))
+                            }
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${upgradeFormData.paymentMethod === "bank_transfer"
+                              ? "border-primary-500 bg-primary-50"
+                              : "border-gray-200 hover:border-gray-300"
+                              }`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <CreditCard className="w-5 h-5 text-primary-600" />
+                              <span className="font-medium">Bank Transfer</span>
+                            </div>
+                          </div>
+                          <div
+                            onClick={() =>
+                              setUpgradeFormData((prev) => ({
+                                ...prev,
+                                paymentMethod: "mobile_money",
+                              }))
+                            }
+                            className={`p-3 border-2 rounded-lg cursor-pointer transition-all ${upgradeFormData.paymentMethod === "mobile_money"
+                              ? "border-primary-500 bg-primary-50"
+                              : "border-gray-200 hover:border-gray-300"
+                              }`}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Smartphone className="w-5 h-5 text-primary-600" />
+                              <span className="font-medium">Mobile Money</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block mb-2 text-sm font-medium text-gray-700">
+                        Select Payment Account
+                      </label>
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {upgradeMerchantAccounts
+                          .filter(
+                            (acc) =>
+                              (upgradeFormData.paymentMethod ===
+                                "bank_transfer" &&
+                                acc.type === "bank") ||
+                              (upgradeFormData.paymentMethod ===
+                                "mobile_money" &&
+                                acc.type === "mobile_money")
+                          )
+                          .map((account) => (
+                            <div
+                              key={account._id}
+                              onClick={() =>
+                                setUpgradeFormData((prev) => ({
+                                  ...prev,
+                                  merchantAccountId: account._id,
+                                }))
+                              }
+                              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${upgradeFormData.merchantAccountId ===
+                                account._id
+                                ? "border-primary-500 bg-primary-50"
+                                : "border-gray-200 hover:border-gray-300"
+                                }`}
+                            >
+                              <h4 className="font-semibold text-gray-900">
+                                {account.name}
+                              </h4>
+                              <div className="mt-2 space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">
+                                    Account:
+                                  </span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono text-sm">
+                                      {account.type === 'bank' ? account.accountNumber : account.phoneNumber}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyToClipboard(account.type === 'bank' ? account.accountNumber : account.phoneNumber);
+                                      }}
+                                      className="text-primary-600 hover:text-primary-700"
+                                    >
+                                      {copiedText === (account.type === 'bank' ? account.accountNumber : account.phoneNumber) ? (
+                                        <CheckCircle2 className="w-4 h-4" />
+                                      ) : (
+                                        <Copy className="w-4 h-4" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm text-gray-600">
+                                    Name:
+                                  </span>
+                                  <span className="text-sm">
+                                    {account.accountName}
+                                  </span>
+                                </div>
+                                {account.bankName && (
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-600">
+                                      Bank:
+                                    </span>
+                                    <span className="text-sm">
+                                      {account.bankName}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {upgradeMerchantAccounts.filter(
+                          (acc) =>
+                            (upgradeFormData.paymentMethod ===
+                              "bank_transfer" &&
+                              acc.type === "bank") ||
+                            (upgradeFormData.paymentMethod ===
+                              "mobile_money" &&
+                              acc.type === "mobile_money")
+                        ).length === 0 && (
+                            <div className="p-4 text-sm text-gray-600 border border-gray-200 border-dashed rounded-lg col-span-full bg-gray-50">
+                              No payment accounts found for this method. Ask your referrer to add a merchant account or use admin accounts instead.
+                            </div>
+                          )}
+                      </div>
+                    </div>
+                    {selectedUpgradeMerchantAccount && (
+                      <div className="p-4 border border-emerald-200 rounded-lg bg-emerald-50">
+                        <h4 className="mb-2 font-semibold text-emerald-900">
+                          Payment Instructions
+                        </h4>
+                        <p className="text-sm text-emerald-800">
+                          {selectedUpgradeMerchantAccount.instructions}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block mb-2 text-sm font-medium text-gray-700">
+                        Transaction Reference *
+                      </label>
+                      <input
+                        type="text"
+                        value={upgradeFormData.transactionReference}
+                        onChange={(e) =>
+                          setUpgradeFormData((prev) => ({
+                            ...prev,
+                            transactionReference: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="Enter transaction reference or ID"
+                      />
+                    </div>
+                    <div>
+                      <label className="block mb-2 text-sm font-medium text-gray-700">
+                        Payment Receipt *
+                      </label>
+                      <div className="p-6 text-center border-2 border-gray-300 border-dashed rounded-lg">
+                        <input
+                          type="file"
+                          accept="image/png, image/jpeg, image/jpg, image/gif, application/pdf"
+                          onChange={handleUpgradeReceiptChange}
+                          className="hidden"
+                          id="upgrade-receipt-upload"
+                        />
+                        <label
+                          htmlFor="upgrade-receipt-upload"
+                          className="cursor-pointer"
+                        >
+                          {upgradeReceiptPreview ? (
+                            <div className="space-y-4">
+                              <img
+                                src={upgradeReceiptPreview}
+                                alt="Receipt preview"
+                                className="object-contain h-32 max-w-full mx-auto rounded"
+                              />
+                              <p className="font-medium text-green-600">
+                                {upgradeReceipt?.name}
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <Camera className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                              <p className="text-gray-600">
+                                Click to upload payment receipt
+                              </p>
+                              <p className="mt-1 text-sm text-gray-500">
+                                PNG, JPG up to 10MB
+                              </p>
+                            </>
+                          )}
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex space-x-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUpgradeForm(false);
+                          setSelectedTargetPackage(null);
+                        }}
+                        className="flex-1 px-4 py-3 font-medium text-gray-800 bg-gray-200 rounded-lg hover:bg-gray-300"
+                      >
+                        Cancel
+                      </button>
+                      <div className="flex-1">
+                        {selectedTargetPackage && isSelectedPriceTooLow && (
+                          <p className="mb-2 text-sm text-red-600">Selected package price must be greater than your current deposit total ({currentDepositTotal.toLocaleString()} ETB).</p>
+                        )}
+                        {/* {selectedTargetPackage && !isSelectedPriceTooLow && (
+                          <p className="mb-2 text-sm text-gray-600">
+                            Upgrade payment: {(selectedTargetPackage.price - currentDepositTotal).toLocaleString()} ETB to move from {upgradeableDeposit.package} ({currentDepositTotal.toLocaleString()} ETB) to {selectedTargetPackage.name} ({selectedTargetPackage.price.toLocaleString()} ETB).
+                          </p>
+                        )} */}
+                        <button
+                          type="submit"
+                          disabled={
+                            submitting ||
+                            !selectedTargetPackage ||
+                            !upgradeFormData.merchantAccountId ||
+                            !upgradeFormData.transactionReference ||
+                            !upgradeReceipt ||
+                            isSelectedPriceTooLow
+                          }
+                          className="flex items-center justify-center flex-1 px-4 py-3 font-medium text-white rounded-lg bg-gold-600 hover:bg-gold-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {submitting ? (
+                            <div className="w-5 h-5 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
+                          ) : (
+                            "Submit Upgrade"
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )
+        }
+      </div >
+    </div >
+  );
+}
