@@ -136,7 +136,7 @@ const Videos: React.FC = () => {
         locale === 'am' ? 'am-ET' : 'en-US',
     );
 
-    const BaseUrl = env.API_BASE_URL ;
+    const BaseUrl = env.API_BASE_URL || 'http://www.molivetradingplc.com';
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
@@ -246,7 +246,7 @@ const Videos: React.FC = () => {
                 <div className="mb-8 rounded-[32px] bg-white/80 p-6 shadow-xl backdrop-blur-sm">
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                         <div className="max-w-3xl">
-                            <p className="text-sm font-semibold tracking-[0.24em] uppercase text-sky-600">
+                            <p className="text-sm font-semibold tracking-[0.24em] uppercase text-emerald-600">
                                 {t.watchEarn}
                             </p>
                             <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
@@ -411,7 +411,7 @@ const Videos: React.FC = () => {
                                 </div>
 
                                 <div className="p-5 mt-6 text-white rounded-3xl bg-slate-900">
-                                    <p className="text-sm uppercase tracking-[0.18em] text-cyan-200">{t.views}</p>
+                                    <p className="text-sm uppercase tracking-[0.18em] text-emerald-200">{t.views}</p>
                                     <p className="mt-3 text-3xl font-semibold">
                                         {numberFormatter.format(selectedVideo.totalViews)}
                                     </p>

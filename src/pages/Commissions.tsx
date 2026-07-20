@@ -20,8 +20,9 @@ interface Commission {
     fullName: string;
     email: string;
   };
-  type: 'deposit' | 'earning';
+  type: 'deposit' | 'earning' | 'dailyReturn' | 'dailyReferral' | 'directReferral' | 'upgrade' | 'credit';
   description: string;
+  failureReason?: string | null;
   createdAt: string;
 }
 
@@ -279,6 +280,9 @@ export default function Commissions() {
                               </span>
                             </div>
                             <p className="text-sm text-gray-600">{commission.description}</p>
+                            {commission.amount === 0 && commission.failureReason && (
+                              <p className="mt-1 text-sm text-red-600">Reason: {commission.failureReason}</p>
+                            )}
                             <p className="text-xs text-gray-500">
                               {new Date(commission.createdAt).toLocaleDateString()} •
                               {new Date(commission.createdAt).toLocaleTimeString()}
@@ -287,12 +291,18 @@ export default function Commissions() {
                         </div>
 
                         <div className="text-right">
-                          <p className="text-lg font-bold text-green-600">
-                            +{commission.amount.toLocaleString()} ETB
+                          <p className={`text-lg font-bold ${commission.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {commission.amount > 0 ? `+${commission.amount.toLocaleString()}` : commission.amount.toLocaleString()} ETB
                           </p>
-                          <p className="text-xs text-gray-500 capitalize">
-                            {commission.type}
-                          </p>
+                          {commission.amount === 0 && commission.failureReason ? (
+                            <span className="inline-flex items-center px-2 py-1 mt-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full">
+                              Failed: {commission.failureReason.length > 30 ? `${commission.failureReason.substring(0, 30)}...` : commission.failureReason}
+                            </span>
+                          ) : (
+                            <p className="text-xs text-gray-500 capitalize">
+                              {commission.type}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

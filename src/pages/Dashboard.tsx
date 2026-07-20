@@ -40,6 +40,7 @@ interface Transaction {
   status: 'pending' | 'completed' | 'rejected';
   createdAt: string;
   description?: string;
+  failureReason?: string | null;
   isManual?: boolean;
   adminName?: string | null;
 }
@@ -378,7 +379,7 @@ export default function Dashboard() {
                   {(stats?.totalDeposits || user?.totalDeposits || 0).toLocaleString()} ETB
                 </p>
               </div>
-              <div className="p-3 bg-emerald-100 rounded-full">
+              <div className="p-3 rounded-full bg-emerald-100">
                 <TrendingUp className="w-6 h-6 text-emerald-600" />
               </div>
             </div>
@@ -429,8 +430,8 @@ export default function Dashboard() {
                   {(stats?.todaysDirectReferrals || 0).toLocaleString()}
                 </p>
               </div>
-              <div className="p-3 bg-indigo-100 rounded-full">
-                <Users className="w-6 h-6 text-indigo-600" />
+              <div className="p-3 rounded-full bg-emerald-100">
+                <Users className="w-6 h-6 text-emerald-600" />
               </div>
             </div>
             <div className="flex items-center mt-4 text-sm">
@@ -446,12 +447,12 @@ export default function Dashboard() {
                   {(stats?.todaysDirectReferralReward || 0).toLocaleString()} ETB
                 </p>
               </div>
-              <div className="p-3 bg-teal-100 rounded-full">
-                <TrendingUp className="w-6 h-6 text-teal-600" />
+              <div className="p-3 rounded-full bg-emerald-100">
+                <TrendingUp className="w-6 h-6 text-emerald-600" />
               </div>
             </div>
             <div className="flex items-center mt-4 text-sm">
-              <span className="text-teal-600">From today's direct referral deposits</span>
+              <span className="text-emerald-600">From today's direct referral deposits</span>
             </div>
           </div>
 
@@ -463,12 +464,12 @@ export default function Dashboard() {
                   {(stats?.dailyReferralReward || 0).toLocaleString()} ETB
                 </p>
               </div>
-              <div className="p-3 rounded-full bg-cyan-100">
-                <TrendingUp className="w-6 h-6 text-cyan-600" />
+              <div className="p-3 rounded-full bg-emerald-100">
+                <TrendingUp className="w-6 h-6 text-emerald-600" />
               </div>
             </div>
             <div className="flex items-center mt-4 text-sm">
-              <span className="text-cyan-600">From today's qualified upline video rewards</span>
+              <span className="text-emerald-600">From today's qualified upline video rewards</span>
             </div>
           </div>
 
@@ -711,7 +712,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="font-medium text-gray-900">
-                            {transaction.description}
+                            {transaction.failureReason || transaction.description}
                           </p>
                           {/* {transaction.isManual && (
                             <p className="inline-flex items-center px-2 py-1 mt-2 text-xs font-semibold text-yellow-800 bg-yellow-100 rounded-full">
@@ -805,7 +806,7 @@ export default function Dashboard() {
 
                 {/* Selected Account Details */}
                 {selectedMerchantAccountId && merchantAccounts.find(a => a._id === selectedMerchantAccountId) && (
-                  <div className="p-4 border border-emerald-200 rounded-lg bg-emerald-50">
+                  <div className="p-4 border rounded-lg border-emerald-200 bg-emerald-50">
                     {(() => {
                       const account = merchantAccounts.find(a => a._id === selectedMerchantAccountId);
                       return (

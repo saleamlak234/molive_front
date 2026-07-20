@@ -37,10 +37,10 @@ const NotificationBanner: React.FC<NotificationBannerProps> = ({
 
   return (
     <div className="w-full max-w-sm bg-white border border-green-100 shadow-2xl rounded-3xl ring-1 ring-black/5 md:max-w-md">
-      <div className="px-4 py-3 overflow-hidden text-white rounded-3xl bg-gradient-to-r from-green-600 via-teal-500 to-cyan-500">
+      <div className="px-4 py-3 overflow-hidden text-white rounded-3xl bg-gradient-to-r from-emerald-600 via-green-500 to-lime-500">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-green-100/90">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
               {displayTitle}
             </p>
             <p className="mt-1 text-sm font-semibold text-white/95 sm:text-base">

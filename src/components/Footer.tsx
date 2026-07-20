@@ -63,10 +63,10 @@ export default function Footer() {
           </div> */}
 
           {/* Notice */}
-          <div className="space-y-3 rounded-2xl border border-primary-500/30 bg-gradient-to-br from-primary-600/20 via-primary-500/10 to-transparent p-4 shadow-[0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-sm">
+          <div className="space-y-3 rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-600/20 via-emerald-500/10 to-transparent p-4 shadow-[0_0_30px_rgba(16,185,129,0.15)] backdrop-blur-sm">
             <div className="flex items-center space-x-2">
-              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-primary-400" />
-              <h3 className="text-lg font-semibold text-primary-200">ሰላም ሞሊቮች</h3>
+              <span className="inline-flex h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400" />
+              <h3 className="text-lg font-semibold text-emerald-200">ሰላም ሞሊቮች</h3>
             </div>
             <p className="text-lg font-extrabold leading-7 text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]">
               በቅርቡ ኢትዮጵያ ውስጥ ቢሮዎችን እንከፍታለን።

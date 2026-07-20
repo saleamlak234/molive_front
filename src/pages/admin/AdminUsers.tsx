@@ -905,7 +905,7 @@ export default function AdminUsers() {
                                     <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
                                     <td className="px-3 py-2 text-sm text-green-700 whitespace-nowrap">{entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()} ETB</td>
                                     <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{entry.fromUser?.fullName || 'System'}</td>
-                                    <td className="px-3 py-2 text-sm text-gray-600">{entry.description}</td>
+                                    <td className="px-3 py-2 text-sm text-gray-600">{entry.failureReason || entry.description}</td>
                                     <td className="px-3 py-2 text-sm">
                                       {entry.failureReason ? (
                                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 cursor-help" title={entry.failureReason}>
@@ -945,7 +945,7 @@ export default function AdminUsers() {
                                   <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{new Date(entry.createdAt).toLocaleString()}</td>
                                   <td className="px-3 py-2 text-sm text-green-700 whitespace-nowrap">{entry.amount >= 0 ? '+' : ''}{entry.amount.toLocaleString()} ETB</td>
                                   <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{entry.fromUser?.fullName || 'System'}</td>
-                                  <td className="px-3 py-2 text-sm text-gray-600">{entry.description}</td>
+                                  <td className="px-3 py-2 text-sm text-gray-600">{entry.failureReason || entry.description}</td>
                                   <td className="px-3 py-2 text-sm">
                                     {entry.failureReason ? (
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title={entry.failureReason}>
